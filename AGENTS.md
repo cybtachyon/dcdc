@@ -2,16 +2,16 @@
 This is a monorepo of a Rust CLI for managing local Docker Compose dev environments.
 
 ## Technical Overview
-- The back-end is a revisionable CMS that uses the Bob ORM for working with a MariaDB database.
-- The front-end uses the Go-App package with Pongo 2 templates and CSS from Bulma via GoDartSass.
-- The front-end communicates with the back-end via incremental Websocket streams using the gob encoding format.
-- The build process compresses the WASM output using Brotli.
-- The CI / CD pipeline is in `.github/workflows`.
-- Infrastructure code is in `infra` and uses Terraform to deploy to Digital Ocean.
+- The focus is on speed and ease of use, followed by developer experience for creating plugins and extending functionality.
+- This is a plugin-based architecture where they are written in TypeScript and provide CLI sub-commands.
+- Plugins can be stored in ~/.dcdc/plugins or added via CLI command.
 
 # Dev Environment Tips
-- Read `go.mod` for the list of configured packages and dependencies.
-- Web Assembly has a 2GB memory limit, so prioritize memory efficiency for the front-end.
+- Read `Cargo.toml` for the list of configured packages and dependencies.
+- Run `cargo` commands with `CARGO_HOME` set to `.cargo` to avoid sandbox restrictions.
+  - e.g. `CARGO_HOME=.cargo cargo build`
+- Use `DCDC_HOME` to set the dcdc home directory to a local path for sandboxed testing.
+  - e.g. `DCDC_HOME=.dcdc ../../target/debug/dcdc hello-world` 
 
 ## Code Style
 - Follow Rust conventions: [Effective Rust]([https://go.dev/doc/effective_go](https://effective-rust.com/title-page.html)). Be concise, declarative, and factual.

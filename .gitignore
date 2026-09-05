@@ -109,3 +109,7 @@ http-client.private.env.json
 # Cargo Packager
 .cargo-packager
 /dist
+
+# Sandboxed homes
+/.dcdc
+/.cargo
