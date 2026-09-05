@@ -15,8 +15,8 @@ pub struct Script {
 }
 
 impl Script {
-    /// Builds a script from a file path, using the file name
-    /// without the `.sh` extension as the name.
+    /// Builds a script from a file path, using the file name,
+    /// dropping a `.sh` extension if present, as the name.
     fn new(path: &Path, subdir: Option<&str>) -> Self {
         let name = path
             .file_stem()
@@ -30,11 +30,13 @@ impl Script {
     }
 }
 
-/// Discovers every `.sh` script under the given `.dcdc/cmd`
-/// directory, including nested subdirectories.
+/// Discovers every script under the given `.dcdc/cmd` directory,
+/// including nested subdirectories.
 ///
-/// An empty list is returned when the directory does not exist,
-/// since a project may not define any scripts yet.
+/// A script is a `.sh` file or an extensionless file; dotfiles and
+/// files with other extensions are ignored. An empty list is
+/// returned when the directory does not exist, since a project may
+/// not define any scripts yet.
 pub fn load(cmd_dir: &Path) -> Result<Vec<Script>> {
     if !cmd_dir.is_dir() {
         return Ok(Vec::new());
@@ -89,7 +91,7 @@ fn collect(dir: &Path, subdir: Option<&str>, out: &mut Vec<Script>) -> Result<()
     for entry in dir.read_dir()? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_file() && path.extension().is_some_and(|ext| ext == "sh") {
+        if path.is_file() && is_script_file(&path) {
             out.push(Script::new(&path, subdir));
         } else if path.is_dir() {
             let label = subdir.or_else(|| path.file_name().and_then(|name| name.to_str()));
@@ -99,13 +101,32 @@ fn collect(dir: &Path, subdir: Option<&str>, out: &mut Vec<Script>) -> Result<()
     Ok(())
 }
 
+/// is_script_file reports whether a file is a discoverable script:
+/// a `.sh` file, or a file with no extension.
+///
+/// Dotfiles are excluded, because hidden helpers such as
+/// `.DS_Store` also have no extension but are not scripts.
+fn is_script_file(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    if name.starts_with('.') {
+        return false;
+    }
+    match path.extension() {
+        Some(ext) => ext == "sh",
+        None => true,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testutil;
 
     /// Lays out a fixture tree under a fresh temp directory:
-    /// `cmd/a.sh`, `cmd/api/b.sh`, `cmd/api/deep/c.sh`, and
+    /// `cmd/a.sh`, `cmd/api/b.sh`, `cmd/api/deep/c.sh`,
+    /// `cmd/hello-world` (no extension), `cmd/.DS_Store`, and
     /// `cmd/notes.txt`.
     ///
     /// Returns the temp directory, which the caller removes.
@@ -117,6 +138,8 @@ mod tests {
             ("a.sh", "# a"),
             ("api/b.sh", "# b"),
             ("api/deep/c.sh", "# c"),
+            ("hello-world", "# hello-world"),
+            (".DS_Store", "not a script"),
             ("notes.txt", "not a script"),
         ] {
             std::fs::write(cmd.join(name), contents).unwrap();
@@ -129,11 +152,23 @@ mod tests {
         let base = build();
         let scripts = load(&base.join("cmd")).unwrap();
         let names: Vec<&str> = scripts.iter().map(|s| s.name.as_str()).collect();
-        assert_eq!(names, ["a", "b", "c"]);
+        assert_eq!(names, ["a", "b", "c", "hello-world"]);
         assert_eq!(scripts[0].subdir, None);
         assert_eq!(scripts[1].subdir.as_deref(), Some("api"));
         // Deep scripts keep the top-level service name.
         assert_eq!(scripts[2].subdir.as_deref(), Some("api"));
+        // The extensionless script is discovered, like a `.sh` one.
+        assert_eq!(scripts[3].subdir, None);
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn ignores_dotfiles_and_other_extensions() {
+        let base = build();
+        let scripts = load(&base.join("cmd")).unwrap();
+        let names: Vec<&str> = scripts.iter().map(|s| s.name.as_str()).collect();
+        assert!(!names.contains(&"notes"), "names: {names:?}");
+        assert!(!names.contains(&".DS_Store"), "names: {names:?}");
         std::fs::remove_dir_all(base).unwrap();
     }
 

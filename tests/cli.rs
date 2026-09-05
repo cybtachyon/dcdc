@@ -73,6 +73,23 @@ fn a_local_script_runs_in_the_calling_directory() {
 }
 
 #[test]
+fn an_extensionless_script_is_discovered_and_runs() {
+    // The shipped example names its scripts without a `.sh`
+    // extension, so a bare file under `.dcdc/cmd` must be runnable
+    // by name.
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let dir = std::env::temp_dir().join(format!("dcdc-ext-{}-{n}", std::process::id()));
+    let cmd = dir.join(".dcdc").join("cmd");
+    std::fs::create_dir_all(&cmd).unwrap();
+    std::fs::write(cmd.join("hello-world"), "#!/bin/sh\necho \"hi\"\n").unwrap();
+    let out = run_dcdc(&dir, &["hello-world"]);
+    let stdout = stdout(&out);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(stdout.contains("hi"), "stdout: {stdout}");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn an_unknown_script_name_reports_the_available_scripts() {
     let dir = project("unknown");
     let out = run_dcdc(&dir, &["nope"]);
