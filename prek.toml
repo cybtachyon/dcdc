@@ -1,0 +1,56 @@
+# Configuration file for `prek`, a git hook framework written in Rust.
+# See https://prek.j178.dev for more information.
+#:schema https://www.schemastore.org/prek.json
+
+exclude = { glob = ["AGENTS.md", "README.md"] }
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+entry = "cargo clippy"
+files = { glob = ["Cargo.toml", "*.rs"] }
+id = "cargo-clippy"
+language = "system"
+name = "Cargo Clippy"
+pass_filenames = 1
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+args = ["-x"]
+entry = "shellcheck"
+files = { glob = [".github/workflows/*.yml", "*.sh"] }
+id = "shellcheck"
+language = "system"
+name = "ShellCheck"
+pass_filenames = 1
+stages = ["pre-commit"]
+
+[[repos]]
+repo = "https://github.com/Yelp/detect-secrets"
+rev = "v1.5.0"
+
+[[repos.hooks]]
+args = ["scan"]
+id = "detect-secrets"
+name = "Detect Secrets"
+pass_filenames = 1
+stages = ["pre-commit"]
+
+[[repos]]
+repo = "https://github.com/compilerla/conventional-pre-commit"
+rev = "v3.6.0"
+
+[[repos.hooks]]
+args = ["--scopes cli,docker,examples,infra,lib", "feat", "fix", "chore", "test"]
+id = "conventional-pre-commit"
+name = "Git Conventional Pre-Commit"
+stages = ["commit-msg"]
+
+[[repos]]
+repo = "builtin"
+hooks = [
+    { id = "trailing-whitespace" },
+    { id = "end-of-file-fixer" },
+    { id = "check-added-large-files" },
+]
