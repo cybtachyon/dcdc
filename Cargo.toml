@@ -8,7 +8,19 @@ name = "dcdc"
 path = "src/main.rs"
 
 [dependencies]
+clap = { version = "4.5", features = ["derive"] }
+include_dir = "0.7"
 indicatif = "0.18.6"
 inquire = "0.9.4"
 owo-colors = "4.4.0"
 rustyscript = "0.12.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+toml_edit = "0.22"
+
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"

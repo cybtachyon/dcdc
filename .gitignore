@@ -104,6 +104,7 @@ http-client.private.env.json
 
 # Added by cargo
 /target
+/vendor
 
 # Cargo Packager
 .cargo-packager
