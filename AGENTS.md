@@ -31,6 +31,8 @@ This is a monorepo of a Rust CLI for managing local Docker Compose dev environme
 - [indiciatif](https://docs.rs/indicatif/latest/indicatif/)
 - [inquire](https://docs.rs/inquire/latest/inquire/)
 - [owo_colors](https://docs.rs/owo-colors/latest/owo_colors/)
+- [Packager](https://docs.crabnebula.dev/packager/)
+- [Packager Updater](https://github.com/crabnebula-dev/cargo-packager/tree/main/crates/updater)
 
 ## Testing Instructions
 `cargo test`

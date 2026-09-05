@@ -14,7 +14,35 @@ Dcdc Compose Dev CLI (DCDC) - The Useful Local Dev Solution.
 
 ## Installation
 
-@todo Finish this stub.
+If you have [Mise](https://mise.jdx.dev/), it's easy:
+
+```
+mise install dcdc
+```
+
+### Native Installers
+
+Linux
+```bash
+curl -fsSL https://raw.githubusercontent.com/cybtachyon/dcdc/refs/heads/main/install.sh | bash
+```
+
+Mac
+```zsh
+brew install orbstack docker
+brew install dcdc/dcdc/dcdc
+```
+
+Windows
+```powershell
+wsl --install --no-distribution
+Restart-Computer
+wsl --update
+choco install wsl-ubuntu-2604
+choco install dcdc
+```
+
+Packages are also available on the [GitHub Releases](https://github.com/cybtachyon/dcdc/releases) page.
 
 ## Quick-Start
 
@@ -27,6 +55,14 @@ Dcdc Compose Dev CLI (DCDC) - The Useful Local Dev Solution.
 ## Contributing.
 
 @todo Finish this stub.
+
+### Build Release Packages
+
+`cargo packager --release`
+
+If packaging in WSL2, prefix with `PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "WindowsApps" | tr '\n' ':')`.
+
+Then you can `sudo apt install ./dist/dcdc_0.1.0_amd64.deb`.
 
 ## Acknowledgements
 

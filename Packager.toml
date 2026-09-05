@@ -1,0 +1,12 @@
+name = "dcdc"
+product-name = "DCDC"
+
+before-packaging-command = "cargo build --release"
+out-dir = "./dist"
+icons = ["icons/icon.png"]
+identifier = "com.derekreese.dcdc"
+version = "0.0.1"
+
+[[binaries]]
+path = "../target/release/dcdc"
+main = true
