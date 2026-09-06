@@ -5,7 +5,7 @@ before-packaging-command = "cargo build --release"
 out-dir = "./dist"
 icons = ["icons/icon.png"]
 identifier = "com.derekreese.dcdc"
-version = "0.0.1"
+version = "0.1.0"
 
 [[binaries]]
 path = "../target/release/dcdc"

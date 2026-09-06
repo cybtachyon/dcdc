@@ -30,9 +30,165 @@ pub fn run(script: &Script, service: &str, root: &Path) -> Result<i32> {
 /// Querying docker rather than parsing the YAML means anchors,
 /// profiles, and extra compose files are handled by compose, so the
 /// check cannot drift from what `docker compose up` would create.
-fn compose_services(root: &Path) -> Result<Vec<String>> {
+pub fn compose_services(root: &Path) -> Result<Vec<String>> {
     let out = query(Some(root), &["compose", "config", "--services"])?;
     Ok(lines(out))
+}
+
+/// exec_in runs a command inside a container with the given working
+/// directory, with stdio inherited, and returns its exit code.
+pub fn exec_in(container: &str, workdir: &str, argv: &[String]) -> Result<i32> {
+    let mut args: Vec<String> = vec!["exec".into(), "-w".into(), workdir.into(), container.into()];
+    args.extend(argv.iter().cloned());
+    let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    execute(&refs)
+}
+
+/// Runs a command in a container and captures its stdout, for
+/// version probes and the like.
+pub fn exec_captured(container: &str, workdir: &str, argv: &[String]) -> Result<String> {
+    let mut args: Vec<&str> = vec!["exec", "-w", workdir, container];
+    args.extend(argv.iter().map(String::as_str));
+    query(None, &args)
+}
+
+/// Whether `name` names a place a plugin sub-command could run:
+/// `local` (the host), a compose service of `root`, or a running
+/// container by that exact name.
+///
+/// A missing or broken compose file yields an empty service list,
+/// so it cannot make a valid name fail; docker being absent only
+/// hides the running-container fallback.
+pub fn scope_found(name: &str, root: Option<&Path>) -> bool {
+    if name == "local" {
+        return true;
+    }
+    if let Some(root) = root
+        && compose_services(root)
+            .ok()
+            .is_some_and(|services| services.iter().any(|s| s == name))
+    {
+        return true;
+    }
+    running_containers()
+        .ok()
+        .is_some_and(|names| names.iter().any(|n| n == name))
+}
+
+/// Resolves the target of a plugin sub-command: a compose service
+/// name or a literal running container name, together with the
+/// working directory to run in and whether the cwd is bind-mounted
+/// into the container.
+///
+/// The workdir is the mapped container path of the cwd when a bind
+/// mount carries it, which is what makes the cwd's mise.toml
+/// visible inside the container; otherwise it is the container's
+/// configured working directory.
+pub fn resolve_container(name: &str, root: &Path, cwd: &Path) -> Result<(String, String, bool)> {
+    // A missing or broken compose file should not stop a literal
+    // container name from resolving, so a compose failure yields an
+    // empty service list rather than an error.
+    let services = compose_services(root).unwrap_or_default();
+    let container = if services.iter().any(|s| s == name) {
+        let expected = container_name(root, name, 1)?;
+        let Some(container) = container_for_service(root, name)? else {
+            return Err(Error::NoContainer {
+                service: name.to_string(),
+                expected,
+            });
+        };
+        container
+    } else {
+        let names = running_containers()?;
+        if !names.iter().any(|n| n == name) {
+            return Err(Error::NoService(name.to_string()));
+        }
+        name.to_string()
+    };
+
+    let mounted = cwd_mount_point(&container, cwd)?;
+    let cwd_mounted = mounted.is_some();
+    let workdir = match mounted {
+        Some(mapped) => mapped,
+        None => container_workdir(&container)?,
+    };
+    Ok((container, workdir, cwd_mounted))
+}
+
+/// Maps the host `cwd` into the container through a bind mount,
+/// returning the mount's destination path when it carries the cwd.
+fn cwd_mount_point(container: &str, cwd: &Path) -> Result<Option<String>> {
+    let raw = query(
+        None,
+        &["inspect", "--format", "{{json .Mounts}}", container],
+    )?;
+    let mounts: Vec<Mount> = serde_json::from_str(&raw).map_err(|e| Error::DockerFailed {
+        command: format!("inspect {container}"),
+        message: format!("bad mounts data: {e}"),
+    })?;
+    // Compare canonicalized paths; when the cwd cannot be
+    // canonicalized, fall back to a raw string comparison.
+    let want = std::fs::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+    Ok(mounts
+        .iter()
+        .filter(|m| m.kind == "bind")
+        .find(|m| {
+            let source = std::path::PathBuf::from(&m.source);
+            source == want
+                || std::fs::canonicalize(&source)
+                    .map(|s| s == want)
+                    .unwrap_or(false)
+                || m.source == want.to_string_lossy()
+        })
+        .map(|m| m.destination.clone()))
+}
+
+/// One entry of a container's `Mounts` list.
+#[derive(Debug, serde::Deserialize)]
+struct Mount {
+    #[serde(rename = "Type")]
+    kind: String,
+    #[serde(rename = "Source")]
+    source: String,
+    #[serde(rename = "Destination")]
+    destination: String,
+}
+
+/// The shell preferred in a container: `bash` when present, else
+/// `sh`.
+pub fn shell_in(container: &str, workdir: &str) -> Result<String> {
+    let (status, _, _) = run_captured(
+        None,
+        &["exec", "-w", workdir, container, "bash", "--version"],
+    )?;
+    Ok(if status.success() {
+        "bash".into()
+    } else {
+        "sh".into()
+    })
+}
+
+/// The shell preferred on the host: `bash` when on the PATH, else
+/// `sh`.
+///
+/// The probe's stdio is nulled, since its version banner must not
+/// leak into the output of the command being run.
+pub fn shell_local() -> String {
+    match std::process::Command::new("bash")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+    {
+        Ok(status) => {
+            if status.success() {
+                "bash".into()
+            } else {
+                "sh".into()
+            }
+        }
+        Err(_) => "sh".into(),
+    }
 }
 
 /// running_containers lists the names of the currently running
@@ -232,7 +388,7 @@ fn lines(out: String) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::match_container;
+    use super::{match_container, scope_found};
 
     #[test]
     fn picks_the_lowest_running_instance() {
@@ -260,5 +416,15 @@ mod tests {
     fn returns_none_when_no_container_matches() {
         let names = vec!["proj-web-1".to_string()];
         assert_eq!(match_container(&names, "proj", "api"), None);
+    }
+
+    #[test]
+    fn the_local_scope_is_found_without_any_query() {
+        // The host is always a valid scope, no docker required.
+        assert!(scope_found("local", None));
+        assert!(scope_found(
+            "local",
+            Some(std::path::Path::new("/nonexistent"))
+        ));
     }
 }

@@ -6,11 +6,14 @@ use crate::error::{Error, Result};
 /// that contains a `.dcdc` directory.
 ///
 /// Searching upward lets a script run from any subdirectory of the
-/// project, not only the root itself.
+/// project, not only the root itself. The dcdc home's own `.dcdc`
+/// directory is not a project marker, so directories above it keep
+/// the home-level configuration in force.
 pub fn find(start: &Path) -> Result<PathBuf> {
+    let home = crate::config::home_dir().ok();
     let mut dir = start;
     loop {
-        if dir.join(".dcdc").is_dir() {
+        if dir.join(".dcdc").is_dir() && home.as_deref() != Some(dir) {
             return Ok(dir.to_path_buf());
         }
         // `parent` returns `None` only at the filesystem root,
@@ -26,6 +29,22 @@ pub fn find(start: &Path) -> Result<PathBuf> {
 mod tests {
     use super::*;
     use crate::testutil;
+
+    #[test]
+    fn the_dcdc_home_is_not_a_project_marker() {
+        let base = testutil::temp_subdir("root-home");
+        // The home holds the dcdc home's own `.dcdc` directory; a
+        // subdirectory of it is not a project.
+        let home = base.join("home");
+        std::fs::create_dir_all(home.join(".dcdc").join("plugins")).unwrap();
+        let sub = home.join("somewhere");
+        std::fs::create_dir_all(&sub).unwrap();
+
+        unsafe { std::env::set_var("DCDC_HOME", &home) };
+        let err = find(&sub).unwrap_err();
+        assert!(matches!(err, Error::NoProjectRoot(_)), "{err:?}");
+        std::fs::remove_dir_all(base).unwrap();
+    }
 
     #[test]
     fn finds_the_nearest_root_above_nested_directories() {

@@ -9,9 +9,9 @@ This is a monorepo of a Rust CLI for managing local Docker Compose dev environme
 # Dev Environment Tips
 - Read `Cargo.toml` for the list of configured packages and dependencies.
 - Run `cargo` commands with `CARGO_HOME` set to `.cargo` to avoid sandbox restrictions.
-  - e.g. `CARGO_HOME=.cargo cargo build`
+  - e.g. `CARGO_HOME=.cargo cargo build` `CARGO_HOME=.cargo cargo fmt` `CARGO_HOME=.cargo cargo test`
 - Use `DCDC_HOME` to set the dcdc home directory to a local path for sandboxed testing.
-  - e.g. `DCDC_HOME=.dcdc ../../target/debug/dcdc hello-world` 
+  - e.g. `DCDC_HOME=.dcdc ../../target/debug/dcdc hello-world`
 
 ## Code Style
 - Follow Rust conventions: [Effective Rust]([https://go.dev/doc/effective_go](https://effective-rust.com/title-page.html)). Be concise, declarative, and factual.

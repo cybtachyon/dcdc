@@ -7,7 +7,8 @@ Dcdc Compose Dev CLI (DCDC) - The Useful Local Dev Solution.
 - **Unlimited Projects** - Develop to your heart’s content
 - **Multi-platform** - For macOS, Linux, and Windows
 - **Custom Domains and SSL** - Uncomplicated local development
-- **Knows Your Stack** - Includes presets for the most common apps, from Next.js, to Laravel, Wordpress, PostCMS, Drupal, Craft CMS, and more
+- **Knows Your Stack** - Includes presets for the most common apps, from Next.js, to Laravel, Wordpress, PostCMS,
+ Drupal, Craft CMS, and more
 - **Insanely Fast** - Written in Rust for maximum speed
 - **Bring Your Own Anything** - Dockerfiles, scripts, everything’s a plugin
 - **No-risk No-lock-in** - Easy to add or remove from any repo without losing a thing
@@ -46,7 +47,45 @@ Packages are also available on the [GitHub Releases](https://github.com/cybtachy
 
 ## Quick-Start
 
-@todo Finish this stub.
+```bash
+dcdc --help
+
+# Using plugins:
+dcdc --help bash
+# Override the default container for a plugin:
+dcdc -c web default:bash ls -la
+```
+
+## Plugins
+
+Plugins are TypeScript sub-commands. The defaults are synced into your `~/.dcdc` home when dcdc installs or updates:
+```bash
+dcdc plugin list          # 1. List plugins
+dcdc plugin use jq api    # 2. Pick a default container for a plugin
+dcdc bash echo hi         # 3. Use plugin!
+```
+
+A project can carry its own plugins in `.dcdc/plugins`. They can
+override or wrap defaults, so you can always call a specific
+plugin:
+```bash
+dcdc default:bash ls -la                         # Default plugin
+dcdc myproject:plugin --argument                 # A project plugin
+dcdc some-user/some-repository:plugin --argument # Installed plugin
+```
+
+Add more plugins from online repositories:
+```bash
+dcdc plugin get some-user/some-plugin
+dcdc plugin remove some-user/some-plugin
+```
+
+Create your own plugins with:
+```bash
+dcdc plugin new my-plugin
+```
+
+  > ![Info](https://raw.githubusercontent.com/primer/octicons-v2/master/icons/16/info.svg) Plugins can override or wrap other commands. While this can be very useful, because of unintended side-effects.
 
 ## Docs
 
@@ -54,7 +93,10 @@ Packages are also available on the [GitHub Releases](https://github.com/cybtachy
 
 ## Contributing.
 
-@todo Finish this stub.
+The test suite is `cargo test`; run cargo with `CARGO_HOME` set to the in-repo `.cargo` so the registry stays inside the
+sandbox. Release packages build with `cargo packager --release`.
+
+See [CONTRIBUTING](CONTRIBUTING.md) for more details.
 
 ### Build Release Packages
 

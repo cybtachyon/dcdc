@@ -1,0 +1,4 @@
+# The shell plugin invokes the container's own shell, so it declares
+# no third-party tools.
+
+[tools]

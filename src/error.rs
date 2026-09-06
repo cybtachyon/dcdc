@@ -19,8 +19,9 @@ pub enum Error {
     /// no compose-style container name can be built.
     BadProjectName(PathBuf),
 
-    /// Usage: the command line did not match the expected shape.
-    Usage,
+    /// TooManyArgs: a script name was given arguments; scripts take
+    /// none, plugin sub-commands do.
+    TooManyArgs(String),
 
     /// ScriptNotFound: no loaded script has the requested name.
     ScriptNotFound {
@@ -47,6 +48,50 @@ pub enum Error {
     /// DockerFailed: a docker subcommand exited with a failure.
     DockerFailed { command: String, message: String },
 
+    /// NoHome: no home directory could be determined, so the
+    /// user-level dcdc state directory cannot be located.
+    NoHome,
+
+    /// BadConfig: dcdc.toml exists but could not be parsed.
+    BadConfig { path: PathBuf, message: String },
+
+    /// PluginSubcommandNotFound: no installed plugin sub-command or
+    /// alias matches the requested name.
+    PluginSubcommandNotFound {
+        name: String,
+        available: Vec<String>,
+    },
+
+    /// AmbiguousPluginSubcommand: the requested name matches
+    /// sub-commands of more than one plugin.
+    AmbiguousPluginSubcommand { name: String, matches: Vec<String> },
+
+    /// NoTarget: a plugin sub-command was invoked without a
+    /// container, and none is configured either.
+    NoTarget { plugin: String },
+
+    /// BadUsage: a command shape the parser accepted but that is not
+    /// meaningful.
+    BadUsage(String),
+
+    /// MissingValue: a flag that requires a value was given without
+    /// one.
+    MissingValue(String),
+
+    /// InvalidRepoRef: a repository reference dcdc cannot read.
+    InvalidRepoRef(String),
+
+    /// DownloadFailed: fetching a plugin repository failed.
+    DownloadFailed(String),
+
+    /// BadArchive: a downloaded plugin archive did not hold the
+    /// expected layout.
+    BadArchive(String),
+
+    /// PluginRuntime: the TypeScript of a plugin sub-command failed
+    /// inside the runtime.
+    PluginRuntime { name: String, message: String },
+
     /// Io: a filesystem or process failure from the standard
     /// library.
     Io(io::Error),
@@ -64,7 +109,10 @@ impl fmt::Display for Error {
                 let d = dir.display();
                 write!(f, "the project directory {d} has no usable name")
             }
-            Error::Usage => write!(f, "usage: dcdc [script]"),
+            Error::TooManyArgs(name) => write!(
+                f,
+                "script {name} does not take arguments; use a plugin sub-command for that"
+            ),
             Error::ScriptNotFound { name, available } => {
                 writeln!(f, "script {name} not found")?;
                 if !available.is_empty() {
@@ -96,6 +144,64 @@ impl fmt::Display for Error {
             }
             Error::DockerFailed { command, message } => {
                 write!(f, "docker {command} failed: {message}")
+            }
+            Error::NoHome => write!(f, "no home directory found for dcdc user state"),
+            Error::BadConfig { path, message } => {
+                let p = path.display();
+                write!(f, "cannot parse {p}: {message}")
+            }
+            Error::PluginSubcommandNotFound { name, available } => {
+                writeln!(f, "sub-command {name} not found")?;
+                if !available.is_empty() {
+                    writeln!(f, "available plugin sub-commands:")?;
+                    for item in available {
+                        writeln!(f, "  {item}")?;
+                    }
+                } else {
+                    writeln!(f, "no plugins are installed")?;
+                    writeln!(
+                        f,
+                        "install one with `dcdc plugin get <github-repo>`, or run a script instead"
+                    )?;
+                }
+                Ok(())
+            }
+            Error::AmbiguousPluginSubcommand { name, matches } => {
+                writeln!(f, "sub-command {name} matches more than one plugin:")?;
+                for item in matches {
+                    writeln!(f, "  {item}")?;
+                }
+                // A same-scope collision stays a collision: the bare
+                // name is refused, and a sub-command is reachable
+                // only by its fully namespaced, qualified name.
+                writeln!(
+                    f,
+                    "the bare name is a collision; call one of them by its \
+                     fully namespaced name, like <plugin>:<command>"
+                )
+            }
+            Error::NoTarget { plugin } => write!(
+                f,
+                "plugin {plugin} has no container; pass -c/--container or run \
+                 `dcdc plugin use {plugin} [container]`"
+            ),
+            Error::BadUsage(message) => write!(f, "{message}"),
+            Error::MissingValue(flag) => write!(f, "{flag} requires a value"),
+            Error::InvalidRepoRef(input) => {
+                write!(
+                    f,
+                    "invalid repository reference {input} \
+                     (expected owner/repo on github.com)"
+                )
+            }
+            Error::DownloadFailed(detail) => {
+                write!(f, "download failed: {detail}")
+            }
+            Error::BadArchive(detail) => {
+                write!(f, "bad plugin archive: {detail}")
+            }
+            Error::PluginRuntime { name, message } => {
+                write!(f, "plugin {name} failed: {message}")
             }
             Error::Io(err) => err.fmt(f),
         }
