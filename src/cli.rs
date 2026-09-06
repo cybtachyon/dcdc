@@ -15,7 +15,7 @@ use clap::{Parser, Subcommand};
 pub const BASE_COMMANDS: [&str; 2] = ["plugin", "help"];
 
 #[derive(Debug, Parser)]
-#[command(name = "dcdc", about = "Dcdc Compose Dev CLI")]
+#[command(name = "dcdc", about = "⎓⎓dcdc Compose Dev CLI")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,

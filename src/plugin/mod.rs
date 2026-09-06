@@ -51,7 +51,7 @@ pub enum Source {
     Home,
 }
 
-/// A plugin installed in a plugins root.
+/// A plugin installed in a plugin's root.
 #[derive(Debug, Clone)]
 pub struct InstalledPlugin {
     /// The directory's name; for a downloaded repository, the
@@ -142,7 +142,7 @@ fn discover_at(root: &Path, source: Source) -> Result<Vec<InstalledPlugin>> {
     Ok(plugins)
 }
 
-/// Discovers one plugin directory, if it holds a sub-command.
+/// Discovers one plugin directory if it holds a sub-command.
 fn discover_one(dir: &Path, source: Source) -> Result<Option<InstalledPlugin>> {
     let mut subcommands = BTreeMap::new();
     for entry in dir.read_dir()? {

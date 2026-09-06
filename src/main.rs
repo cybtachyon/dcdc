@@ -205,8 +205,7 @@ fn handle_dcdc_help(
 /// A name owned by a project sub-command and a home one is listed
 /// once, under the shadowing project plugin.
 fn print_general_help(plugins: &[plugin::InstalledPlugin]) {
-    println!("dcdc {}", env!("CARGO_PKG_VERSION"));
-    println!("Dcdc Compose Dev CLI");
+    println!("dcdc {}", env!("CARGO_PKG_VERSION"), "⎓⎓Dcdc Compose Dev CLI");
     println!();
     println!("Usage: dcdc [OPTIONS] [COMMAND]");
 
