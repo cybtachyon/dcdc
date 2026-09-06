@@ -29,9 +29,11 @@ pub enum Command {
     /// A plugin sub-command (or alias) or a script name, followed
     /// by its arguments.
     ///
-    /// `-c/--container` is dcdc's own flag, so it is extracted from
-    /// the raw arguments before parsing; it cannot be a declared
-    /// option while an external sub-command exists.
+    /// `-c/--container` and `-v/--verbose` are dcdc's own flags, read
+    /// from the front of the line before the sub-command name; clap
+    /// cannot mix a declared option with an external sub-command, so
+    /// everything after the name is passed to it word for word, and
+    /// it may accept those same names for itself.
     #[command(external_subcommand)]
     Sub(Vec<String>),
 }

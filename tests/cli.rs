@@ -1000,6 +1000,188 @@ fn a_two_wrapper_collision_errors_and_the_qualified_name_works() {
     std::fs::remove_dir_all(&proj).unwrap();
 }
 
+// --- The verbose mode -----------------------------------------------
+
+/// The verbose mode names the file that runs, and the sub-commands
+/// of the same name that the selection hides.
+#[test]
+fn a_verbose_run_reports_the_selected_sub_command_and_the_matches_it_hides() {
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let home = tempdir("verb-home", n);
+    let home_plugins = plugins_root(&home);
+    plugin_echoing(&home_plugins, "echohome", "from-home");
+
+    let proj = tempdir("verb-proj", n);
+    let proj_plugins = proj.join(".dcdc").join("plugins");
+    std::fs::create_dir_all(&proj_plugins).unwrap();
+    plugin_echoing(&proj_plugins, "echoproj", "from-project");
+
+    // Verbose: the selected file, and the home copy it shadows.
+    let out = run_dcdc_env(&proj, &["-c", "local", "-v", "dup"], Some(&home));
+    assert!(
+        out.status.success(),
+        "stdout: {}\nstderr: {}",
+        stdout(&out),
+        stderr(&out)
+    );
+    let se = stderr(&out);
+    assert!(se.contains("verbose:"), "stderr: {se}");
+    let selected = proj_plugins.join("echoproj").join("dup.ts");
+    let hidden = home_plugins.join("echohome").join("dup.ts");
+    assert!(
+        se.contains(&format!(
+            "dup resolves to plugin echoproj (project) in {}",
+            selected.display()
+        )),
+        "stderr: {se}"
+    );
+    assert!(
+        se.contains("other sub-command(s) use the same name and were not selected"),
+        "stderr: {se}"
+    );
+    assert!(
+        se.contains(&format!("(home) in {}", hidden.display())),
+        "stderr: {se}"
+    );
+    // The plugin's own output stays on stdout.
+    assert!(
+        stdout(&out).contains("from-project"),
+        "stdout: {}",
+        stdout(&out)
+    );
+
+    // Without the flag, the run is silent about the resolution.
+    let out = run_dcdc_env(&proj, &["-c", "local", "dup"], Some(&home));
+    assert!(
+        out.status.success(),
+        "stdout: {}\nstderr: {}",
+        stdout(&out),
+        stderr(&out)
+    );
+    assert!(
+        !stderr(&out).contains("verbose"),
+        "stderr: {}",
+        stderr(&out)
+    );
+    std::fs::remove_dir_all(&home).unwrap();
+    std::fs::remove_dir_all(&proj).unwrap();
+}
+
+/// A sub-command with no rivals gets the selection line alone.
+#[test]
+fn a_verbose_run_of_a_solo_sub_command_names_only_itself() {
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let home = tempdir("verb2-home", n);
+    let dir = plugins_root(&home).join("solo");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("tool.ts"), echoer("tool-ran")).unwrap();
+    let proj = tempdir("verb2-proj", n);
+    std::fs::create_dir_all(proj.join(".dcdc")).unwrap();
+
+    let out = run_dcdc_env(&proj, &["-c", "local", "-v", "tool"], Some(&home));
+    assert!(
+        out.status.success(),
+        "stdout: {}\nstderr: {}",
+        stdout(&out),
+        stderr(&out)
+    );
+    let se = stderr(&out);
+    let file = dir.join("tool.ts");
+    assert!(
+        se.contains(&format!(
+            "tool resolves to plugin solo (home) in {}",
+            file.display()
+        )),
+        "stderr: {se}"
+    );
+    // Nothing else matched, so there is no hidden list.
+    assert!(!se.contains("were not selected"), "stderr: {se}");
+    std::fs::remove_dir_all(&home).unwrap();
+    std::fs::remove_dir_all(&proj).unwrap();
+}
+
+/// The sub-command's own word list is passed through untouched, so a
+/// plugin can accept the same `-c` and `-v` names for itself.
+#[test]
+fn a_sub_command_receives_the_flags_after_its_name() {
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let home = tempdir("verb3-home", n);
+    let dir = plugins_root(&home).join("solo");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("tool.ts"), echoer("tool-ran")).unwrap();
+    let proj = tempdir("verb3-proj", n);
+    std::fs::create_dir_all(proj.join(".dcdc")).unwrap();
+
+    // The same names, placed after the sub-command name, reach the
+    // plugin as its own arguments, and do not turn on dcdc's verbose
+    // mode.
+    for (argv, expect) in [
+        (vec!["-c", "local", "tool", "-v", "x"], "tool-ran -v x"),
+        (
+            vec!["-c", "local", "tool", "--verbose", "x"],
+            "tool-ran --verbose x",
+        ),
+        (vec!["-c", "local", "tool", "-c", "web"], "tool-ran -c web"),
+    ] {
+        let out = run_dcdc_env(&proj, &argv, Some(&home));
+        assert!(
+            out.status.success(),
+            "argv: {argv:?}\nstdout: {}\nstderr: {}",
+            stdout(&out),
+            stderr(&out)
+        );
+        assert!(
+            stdout(&out).contains(expect),
+            "argv: {argv:?} expected {expect:?}, stdout: {}",
+            stdout(&out)
+        );
+        // Not dcdc's verbose flag, so no resolution account is printed.
+        assert!(
+            !stderr(&out).contains("verbose"),
+            "argv: {argv:?} stderr: {}",
+            stderr(&out)
+        );
+    }
+    std::fs::remove_dir_all(&home).unwrap();
+    std::fs::remove_dir_all(&proj).unwrap();
+}
+
+/// A dcdc flag placed before the sub-command name is dcdc's own and
+/// stays out of the sub-command's arguments.
+#[test]
+fn a_leading_flag_is_dcdcs_and_stays_out_of_the_sub_command() {
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let home = tempdir("verb4-home", n);
+    let dir = plugins_root(&home).join("solo");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("tool.ts"), echoer("tool-ran")).unwrap();
+    let proj = tempdir("verb4-proj", n);
+    std::fs::create_dir_all(proj.join(".dcdc")).unwrap();
+
+    // `-v` before the name turns on dcdc's verbose mode and is not a
+    // plugin argument; `-c` before the name sets dcdc's container.
+    let out = run_dcdc_env(&proj, &["-c", "local", "-v", "tool", "x"], Some(&home));
+    assert!(
+        out.status.success(),
+        "stdout: {}\nstderr: {}",
+        stdout(&out),
+        stderr(&out)
+    );
+    assert!(
+        stdout(&out).contains("tool-ran x"),
+        "stdout: {}",
+        stdout(&out)
+    );
+    assert!(!stdout(&out).contains("-v"), "stdout: {}", stdout(&out));
+    assert!(
+        stderr(&out).contains("verbose:"),
+        "stderr: {}",
+        stderr(&out)
+    );
+    std::fs::remove_dir_all(&home).unwrap();
+    std::fs::remove_dir_all(&proj).unwrap();
+}
+
 /// `--help` of a claimed base command shows the claiming plugin's
 /// help, not the one clap renders for dcdc's own command.
 #[test]

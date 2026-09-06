@@ -1,3 +1,4 @@
+mod arguments;
 mod cli;
 mod config;
 mod docker;
@@ -41,14 +42,20 @@ fn main() -> ExitCode {
 /// alias, or a legacy script.
 fn run() -> Result<i32> {
     let raw: Vec<String> = env::args().skip(1).collect();
-    // `-c/--container` is dcdc's own flag, so it is pulled out of
-    // the raw arguments wherever it sits. Clap cannot mix a global
-    // option with an external sub-command, so this pre-scan is what
-    // makes `-c` usable in every position.
-    let (container, args) = extract_container(&raw);
+    // `-c/--container` and `-v/--verbose` are dcdc's own flags, read
+    // from the front of the line. Clap cannot mix a declared option
+    // with an external sub-command, so the split is what lets dcdc
+    // and a sub-command use the same flag names: dcdc reads them
+    // before the sub-command name, the sub-command the rest.
+    let (flags, args) = arguments::split(&raw)?;
     // An external sub-command forbids declared global options, so
     // clap would refuse a --version flag; answer it here instead.
-    if args.iter().any(|a| a == "--version" || a == "-V") {
+    // Only a `--version` in the leading region is dcdc's; one after
+    // the sub-command name is the sub-command's own argument.
+    if arguments::leading(&args)
+        .iter()
+        .any(|a| a == "--version" || a == "-V")
+    {
         println!("dcdc {}", env!("CARGO_PKG_VERSION"));
         return Ok(0);
     }
@@ -63,11 +70,11 @@ fn run() -> Result<i32> {
             plugin::sync::BackgroundSync::none()
         }
     };
-    // A help flag placed before any command is dcdc's own: it
-    // answers it, including plugin sections clap cannot render. A
-    // help flag after a command name belongs to that command, so it
-    // flows through to it untouched.
-    if let Some(target) = find_dcdc_help(&args) {
+    // A help flag in the leading region is dcdc's own: it answers
+    // it, including plugin sections clap cannot render. A help flag
+    // after a command name belongs to that command, so it flows
+    // through to it untouched.
+    if let Some(target) = arguments::find_help(&args) {
         return handle_dcdc_help(target, &mut sync);
     }
     let cwd = env::current_dir()?;
@@ -92,7 +99,7 @@ fn run() -> Result<i32> {
         }
         if plugin::name_claimed(&plugins, name) {
             let rest = &args[1..];
-            return dispatch_subcommand(name, rest, &container, &plugins, &loaded, &cwd, &mut sync);
+            return dispatch_subcommand(name, rest, &flags, &plugins, &loaded, &cwd, &mut sync);
         }
     }
 
@@ -128,33 +135,11 @@ fn run() -> Result<i32> {
                 list(&plugins, &loaded)
             }
             [name, rest @ ..] => {
-                dispatch_subcommand(name, rest, &container, &plugins, &loaded, &cwd, &mut sync)
+                dispatch_subcommand(name, rest, &flags, &plugins, &loaded, &cwd, &mut sync)
             }
         },
         None => list(&plugins, &loaded),
     }
-}
-
-/// Finds a help flag that belongs to dcdc itself: a `--help` or `-h`
-/// placed before the first positional argument, which is a command
-/// name. Returns the command the help is for: `None` for the
-/// general help, else the first command name, when one follows.
-///
-/// A help flag after a command name is that command's own argument,
-/// so it is not found here and flows through to the command.
-fn find_dcdc_help(args: &[String]) -> Option<Option<String>> {
-    let help_in_leading_flags = args
-        .iter()
-        .take_while(|a| a.starts_with('-'))
-        .any(|a| a == "--help" || a == "-h");
-    if !help_in_leading_flags {
-        return None;
-    }
-    let target = args
-        .iter()
-        .position(|a| !a.starts_with('-'))
-        .map(|i| args[i].clone());
-    Some(target)
 }
 
 /// Answers a dcdc-level help request: the general help, the help of
@@ -205,7 +190,7 @@ fn handle_dcdc_help(
 /// A name owned by a project sub-command and a home one is listed
 /// once, under the shadowing project plugin.
 fn print_general_help(plugins: &[plugin::InstalledPlugin]) {
-    println!("dcdc {}", env!("CARGO_PKG_VERSION"), "⎓⎓Dcdc Compose Dev CLI");
+    println!("dcdc {}  ⎓⎓Dcdc Compose Dev CLI", env!("CARGO_PKG_VERSION"));
     println!();
     println!("Usage: dcdc [OPTIONS] [COMMAND]");
 
@@ -237,6 +222,8 @@ fn print_general_help(plugins: &[plugin::InstalledPlugin]) {
     println!();
     println!("Options:");
     println!("  -c, --container <CONTAINER>  Run in the named container, or `local` for the host");
+    println!("Flags:");
+    println!("  -v, --verbose                Print plugin sub-command resolution details");
     println!("  -V, --version                Print version information");
     println!("  -h, --help                   Print help");
 }
@@ -331,16 +318,24 @@ fn wait_and_rediscover(
 /// A resolved sub-command that claims the name of a dcdc base
 /// command prints a warning before it runs, until it says it means
 /// to, with `wrap_dcdc_command = true`.
+///
+/// The verbose mode, `-v/--verbose`, names the file the resolved
+/// sub-command runs from, and every other sub-command the same name
+/// matched, so a plugin developer sees what a bare name hides.
 fn dispatch_subcommand(
     name: &str,
     rest: &[String],
-    container: &Option<String>,
+    flags: &arguments::OwnFlags,
     plugins: &[plugin::InstalledPlugin],
     loaded: &config::Loaded,
     cwd: &Path,
     sync: &mut plugin::sync::BackgroundSync,
 ) -> Result<i32> {
-    let (mut container, args) = strip_container(container.as_deref(), rest)?;
+    // The sub-command's own arguments pass through untouched: a
+    // plugin may declare `-c` and `-v` for itself, and dcdc no
+    // longer strips them from the sub-command's word list. The
+    // container comes only from dcdc's leading flags.
+    let mut container = flags.container.clone();
 
     // The set was read while the sync may still be writing, so a
     // miss may be a plugin not yet in the set: a pending or still
@@ -375,11 +370,17 @@ fn dispatch_subcommand(
     };
 
     let Some(res) = res else {
-        if !args.is_empty() {
+        if !rest.is_empty() {
             return Err(Error::TooManyArgs(name.to_string()));
         }
         return run_script(name);
     };
+    // The verbose mode accounts for the resolution before anything
+    // runs: the file that will execute, and every other sub-command
+    // the same name matched, which the selection hides.
+    if flags.verbose {
+        print_verbose_resolution(name, &res, plugins);
+    }
     // A sub-command that claims the name of a dcdc base command
     // hides dcdc's own command; the warning says so, and names the
     // export that silences it, on every run until the plugin adds
@@ -427,67 +428,49 @@ fn dispatch_subcommand(
         root: project.root.as_ref().map(PathBuf::from),
         cwd: cwd.to_path_buf(),
     };
-    plugin::runtime::execute(&res, &args, &target, &project, &ctx)
+    plugin::runtime::execute(&res, rest, &target, &project, &ctx)
 }
 
-/// Extracts `-c/--container` from the raw command line, wherever the
-/// user placed it, returning the value along with the remaining
-/// arguments.
-fn extract_container(raw: &[String]) -> (Option<String>, Vec<String>) {
-    let mut container = None;
-    let mut args = Vec::with_capacity(raw.len());
-    let mut i = 0;
-    while i < raw.len() {
-        match raw[i].as_str() {
-            "-c" | "--container" => {
-                let value = raw.get(i + 1).cloned();
-                if value.is_none() {
-                    eprintln!("dcdc: -c/--container requires a value");
-                    std::process::exit(2);
-                }
-                container = value;
-                i += 2;
-            }
-            _ => {
-                if let Some(value) = raw[i].strip_prefix("--container=") {
-                    container = Some(value.to_string());
-                } else {
-                    args.push(raw[i].clone());
-                }
-                i += 1;
-            }
+/// Prints the verbose account of a resolved sub-command: the file
+/// that runs, and the sub-commands of the same name that did not.
+///
+/// The rivals are matched on the bare command part of the call, so a
+/// qualified call also reports the matches its qualifier bypassed.
+fn print_verbose_resolution(
+    name: &str,
+    res: &plugin::Resolution,
+    plugins: &[plugin::InstalledPlugin],
+) {
+    eprintln!(
+        "dcdc: verbose: {name} resolves to plugin {} ({}) in {}",
+        res.plugin.name,
+        source_word(res.plugin.source),
+        res.subcommand.path.display(),
+    );
+    let bare = name.rsplit_once(':').map(|(_, cmd)| cmd).unwrap_or(name);
+    let others = plugin::unselected_matches(plugins, bare, res);
+    if !others.is_empty() {
+        eprintln!(
+            "dcdc: verbose: {} other sub-command(s) use the same name and were not selected:",
+            others.len()
+        );
+        for other in &others {
+            eprintln!(
+                "dcdc: verbose:   {} ({}) in {}",
+                plugin::labeled(&other.plugin, &other.subcommand),
+                source_word(other.plugin.source),
+                other.subcommand.path.display(),
+            );
         }
     }
-    (container, args)
 }
 
-/// Extracts a `-c`/`--container` flag from the sub-command's own
-/// argument list, in case the user placed it there, and returns the
-/// effective value along with the clean argument list.
-fn strip_container(global: Option<&str>, rest: &[String]) -> Result<(Option<String>, Vec<String>)> {
-    let mut container = global.map(str::to_string);
-    let mut args = Vec::with_capacity(rest.len());
-    let mut i = 0;
-    while i < rest.len() {
-        match rest[i].as_str() {
-            "-c" | "--container" => {
-                let Some(value) = rest.get(i + 1) else {
-                    return Err(Error::MissingValue("-c/--container".to_string()));
-                };
-                container = Some(value.clone());
-                i += 2;
-            }
-            _ => {
-                if let Some(value) = rest[i].strip_prefix("--container=") {
-                    container = Some(value.to_string());
-                } else {
-                    args.push(rest[i].clone());
-                }
-                i += 1;
-            }
-        }
+/// The word a verbose line uses for a plugin's source.
+fn source_word(source: plugin::Source) -> &'static str {
+    match source {
+        plugin::Source::Project => "project",
+        plugin::Source::Home => "home",
     }
-    Ok((container, args))
 }
 
 /// Asks which container a plugin sub-command should run in, when no
@@ -648,43 +631,4 @@ fn run_script(name: &str) -> Result<i32> {
 /// Returns the `.dcdc/cmd` directory of a project root.
 fn cmd_dir(root: &Path) -> PathBuf {
     root.join(".dcdc").join("cmd")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn args(v: &[&str]) -> Vec<String> {
-        v.iter().map(|s| s.to_string()).collect()
-    }
-
-    #[test]
-    fn a_help_flag_before_any_command_is_dcdcs() {
-        // General help, and help for a named or external command.
-        assert_eq!(find_dcdc_help(&args(&["--help"])), Some(None));
-        assert_eq!(find_dcdc_help(&args(&["-h"])), Some(None));
-        assert_eq!(
-            find_dcdc_help(&args(&["--help", "bash"])),
-            Some(Some("bash".into()))
-        );
-        assert_eq!(
-            find_dcdc_help(&args(&["-h", "bash", "echo"])),
-            Some(Some("bash".into()))
-        );
-        assert_eq!(
-            find_dcdc_help(&args(&["--help", "plugin"])),
-            Some(Some("plugin".into()))
-        );
-    }
-
-    #[test]
-    fn a_help_flag_after_a_command_is_the_commands_own() {
-        // Once a command name has started, every following flag is
-        // the command's argument, so none of these is dcdc's help.
-        assert_eq!(find_dcdc_help(&args(&["bash", "--help"])), None);
-        assert_eq!(find_dcdc_help(&args(&["bash", "-h"])), None);
-        assert_eq!(find_dcdc_help(&args(&["bash", "echo", "--help"])), None);
-        assert_eq!(find_dcdc_help(&args(&["bash", "echo"])), None);
-        assert_eq!(find_dcdc_help(&args(&[])), None);
-    }
 }

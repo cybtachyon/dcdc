@@ -274,12 +274,39 @@ pub fn resolve(plugins: &[InstalledPlugin], name: &str) -> Result<Resolution> {
 
 /// A sub-command's display label, with the qualified name that
 /// calls it, when that can be spelled.
-fn labeled(plugin: &InstalledPlugin, sub: &Subcommand) -> String {
+pub fn labeled(plugin: &InstalledPlugin, sub: &Subcommand) -> String {
     let label = label(sub);
     match qualified_call(plugin, sub) {
         Some(call) => format!("{label} (call it {call})"),
         None => label,
     }
+}
+
+/// The installed sub-commands that match a name but were not
+/// selected by a resolution, in discovery order.
+///
+/// The verbose mode reports them: a name can reach several
+/// sub-commands, and only one runs. The name is the bare command
+/// part of the call, so a qualified call reports the matches its
+/// qualifier bypassed, too.
+pub fn unselected_matches(
+    plugins: &[InstalledPlugin],
+    name: &str,
+    selected: &Resolution,
+) -> Vec<Resolution> {
+    plugins
+        .iter()
+        .flat_map(|plugin| {
+            plugin
+                .subcommands
+                .values()
+                .filter(|sub| sub_matches(sub, name) && sub.path != selected.subcommand.path)
+                .map(|sub| Resolution {
+                    plugin: plugin.clone(),
+                    subcommand: sub.clone(),
+                })
+        })
+        .collect()
 }
 
 /// Whether a sub-command matches a name: its file stem, its
@@ -934,6 +961,37 @@ export default async (): Promise<number> => 0;
 
         let res = resolve(&plugins, "solo").unwrap();
         assert_eq!(res.plugin.name, "three");
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn unselected_matches_reports_the_matches_a_resolution_hides() {
+        let base = testutil::temp_subdir("plugin-unselected");
+        let proj = base.join("proj");
+        let home = base.join("home");
+        // The project plugin wins `dup`; the home one is hidden.
+        build_plugin(&proj, "one", "dup");
+        build_plugin(&home, "two", "dup");
+        build_plugin(&home, "three", "solo");
+        let plugins: Vec<InstalledPlugin> = discover_at(&proj, Source::Project)
+            .unwrap()
+            .into_iter()
+            .chain(discover_at(&home, Source::Home).unwrap())
+            .collect();
+
+        let res = resolve(&plugins, "dup").unwrap();
+        assert_eq!(res.plugin.name, "one");
+        let others = unselected_matches(&plugins, "dup", &res);
+        assert_eq!(others.len(), 1, "{others:?}");
+        assert_eq!(others[0].plugin.name, "two");
+
+        // A name with no rivals reports none, even for a project
+        // winner, because nothing else matched at all.
+        let res = resolve(&plugins, "solo").unwrap();
+        assert!(
+            unselected_matches(&plugins, "solo", &res).is_empty(),
+            "{res:?}"
+        );
         std::fs::remove_dir_all(base).unwrap();
     }
 
