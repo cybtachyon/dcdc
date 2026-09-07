@@ -21,7 +21,7 @@ use error::{Error, Result};
 
 /// CLI entry point.
 ///
-/// It keeps the exit code of the executed script or plugin
+/// Keeps the exit code of the executed script or plugin
 /// sub-command, so a failing run makes the CLI fail too, and maps
 /// every other failure to exit code 1 with a message on stderr.
 fn main() -> ExitCode {
@@ -42,20 +42,18 @@ fn main() -> ExitCode {
 /// alias, or a legacy script.
 fn run() -> Result<i32> {
     let raw: Vec<String> = env::args().skip(1).collect();
-    // `-c/--container` and `-v/--verbose` are dcdc's own flags, read
-    // from the front of the line. Clap cannot mix a declared option
-    // with an external sub-command, so the split is what lets dcdc
-    // and a sub-command use the same flag names: dcdc reads them
-    // before the sub-command name, the sub-command the rest.
-    let (flags, args) = arguments::split(&raw)?;
+    // dcdc's own arguments, -c/--container, -v/--verbose,
+    // -h/--help, and -V/--version, are read from the front of the
+    // line. Clap cannot mix a declared option with an external
+    // sub-command, so the split is what lets dcdc and a
+    // sub-command use the same flag names: dcdc reads them before
+    // the sub-command name, the sub-command the rest.
+    let (own, args) = arguments::split(&raw)?;
     // An external sub-command forbids declared global options, so
     // clap would refuse a --version flag; answer it here instead.
     // Only a `--version` in the leading region is dcdc's; one after
     // the sub-command name is the sub-command's own argument.
-    if arguments::leading(&args)
-        .iter()
-        .any(|a| a == "--version" || a == "-V")
-    {
+    if own.is_set("--version") {
         println!("dcdc {}", env!("CARGO_PKG_VERSION"));
         return Ok(0);
     }
@@ -71,11 +69,12 @@ fn run() -> Result<i32> {
         }
     };
     // A help flag in the leading region is dcdc's own: it answers
-    // it, including plugin sections clap cannot render. A help flag
-    // after a command name belongs to that command, so it flows
-    // through to it untouched.
-    if let Some(target) = arguments::find_help(&args) {
-        return handle_dcdc_help(target, &mut sync);
+    // it, including the plugin sections clap cannot render. The
+    // target is the sub-command word, when there is one; a help
+    // flag after a command name belongs to that command, so it
+    // flows through to it untouched.
+    if own.is_set("--help") {
+        return handle_dcdc_help(args.first().cloned(), &mut sync, &own);
     }
     let cwd = env::current_dir()?;
     let mut plugins = plugin::discover()?;
@@ -99,7 +98,7 @@ fn run() -> Result<i32> {
         }
         if plugin::name_claimed(&plugins, name) {
             let rest = &args[1..];
-            return dispatch_subcommand(name, rest, &flags, &plugins, &loaded, &cwd, &mut sync);
+            return dispatch_subcommand(name, rest, &own, &plugins, &loaded, &cwd, &mut sync);
         }
     }
 
@@ -135,7 +134,7 @@ fn run() -> Result<i32> {
                 list(&plugins, &loaded)
             }
             [name, rest @ ..] => {
-                dispatch_subcommand(name, rest, &flags, &plugins, &loaded, &cwd, &mut sync)
+                dispatch_subcommand(name, rest, &own, &plugins, &loaded, &cwd, &mut sync)
             }
         },
         None => list(&plugins, &loaded),
@@ -151,6 +150,7 @@ fn run() -> Result<i32> {
 fn handle_dcdc_help(
     target: Option<String>,
     sync: &mut plugin::sync::BackgroundSync,
+    own: &arguments::OwnArguments,
 ) -> Result<i32> {
     let mut plugins = plugin::discover()?;
     // The set may predate a sync that is still running or has just
@@ -163,7 +163,7 @@ fn handle_dcdc_help(
     }
     match target {
         None => {
-            print_general_help(&plugins);
+            print_general_help(own, &plugins);
             Ok(0)
         }
         Some(cmd) => {
@@ -182,14 +182,17 @@ fn handle_dcdc_help(
 /// Prints the general help.
 ///
 /// Clap renders the fixed part, and this adds the `Plugin Commands`
-/// section it cannot render, because the sub-commands are not known
+/// section it cannot render because the sub-commands are not known
 /// at compile time. The section lists every sub-command's name and
-/// description, and leads the regular command list, so the
+/// description and leads the regular command list, so the
 /// frequently used plugin commands come first.
 ///
 /// A name owned by a project sub-command and a home one is listed
-/// once, under the shadowing project plugin.
-fn print_general_help(plugins: &[plugin::InstalledPlugin]) {
+/// once under the shadowing project plugin.
+///
+/// The `Options:` and `Flags:` sections come from the arguments
+/// module, so a new argument documents itself.
+fn print_general_help(own: &arguments::OwnArguments, plugins: &[plugin::InstalledPlugin]) {
     println!("dcdc {}  ⎓⎓Dcdc Compose Dev CLI", env!("CARGO_PKG_VERSION"));
     println!();
     println!("Usage: dcdc [OPTIONS] [COMMAND]");
@@ -220,12 +223,7 @@ fn print_general_help(plugins: &[plugin::InstalledPlugin]) {
     println!("  plugin   Manage plugins.");
     println!("  help     Print this message or the help of the given subcommand(s)");
     println!();
-    println!("Options:");
-    println!("  -c, --container <CONTAINER>  Run in the named container, or `local` for the host");
-    println!("Flags:");
-    println!("  -v, --verbose                Print plugin sub-command resolution details");
-    println!("  -V, --version                Print version information");
-    println!("  -h, --help                   Print help");
+    arguments::print_argument_help(own);
 }
 
 /// Prints the help of one plugin sub-command: its description, and
@@ -325,7 +323,7 @@ fn wait_and_rediscover(
 fn dispatch_subcommand(
     name: &str,
     rest: &[String],
-    flags: &arguments::OwnFlags,
+    own: &arguments::OwnArguments,
     plugins: &[plugin::InstalledPlugin],
     loaded: &config::Loaded,
     cwd: &Path,
@@ -334,8 +332,8 @@ fn dispatch_subcommand(
     // The sub-command's own arguments pass through untouched: a
     // plugin may declare `-c` and `-v` for itself, and dcdc no
     // longer strips them from the sub-command's word list. The
-    // container comes only from dcdc's leading flags.
-    let mut container = flags.container.clone();
+    // container comes only from dcdc's leading arguments.
+    let mut container = own.value("--container").map(str::to_string);
 
     // The set was read while the sync may still be writing, so a
     // miss may be a plugin not yet in the set: a pending or still
@@ -378,7 +376,7 @@ fn dispatch_subcommand(
     // The verbose mode accounts for the resolution before anything
     // runs: the file that will execute, and every other sub-command
     // the same name matched, which the selection hides.
-    if flags.verbose {
+    if own.is_set("--verbose") {
         print_verbose_resolution(name, &res, plugins);
     }
     // A sub-command that claims the name of a dcdc base command

@@ -14,3 +14,24 @@ repository. Start a new plugin from the built-in template:
 ```bash
 dcdc plugin new my-plugin
 ```
+
+## The dcdc home
+
+The per-user state of dcdc, the `dcdc.toml` configuration and the
+installed plugins, lives in the `~/.dcdc` directory by default. Set
+the `DCDC_HOME` environment variable to another directory to
+relocate it; dcdc then keeps its user state in `<DCDC_HOME>/.dcdc`
+instead.
+
+## Smoke test
+
+`cargo run --bin smoke` builds dcdc and runs it against the
+`examples/next-js-example` project in a throwaway dcdc home: the
+build, the listing, the default plugin sync, and the example's
+local scripts. Run it to smoke test a change to the CLI. Pass
+`--example <name>` to exercise another project from `examples/`:
+
+```bash
+cargo run --bin smoke
+cargo run --bin smoke -- --example <name>
+```

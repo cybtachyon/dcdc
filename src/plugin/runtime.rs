@@ -6,7 +6,7 @@
 //! after the module loads, so top-level module code runs without
 //! host access and only the entry point runs in the full context.
 
-use rustyscript::serde_json::{Value, json};
+use serde_json::{Value, json};
 use rustyscript::{Error as RsError, Module, Runtime, RuntimeOptions};
 
 use super::Resolution;

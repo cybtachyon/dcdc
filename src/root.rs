@@ -40,6 +40,9 @@ mod tests {
         let sub = home.join("somewhere");
         std::fs::create_dir_all(&sub).unwrap();
 
+        // Edition 2024 makes set_var unsafe; the lock keeps this
+        // write from overlapping the other environment tests.
+        let _lock = testutil::env_lock();
         unsafe { std::env::set_var("DCDC_HOME", &home) };
         let err = find(&sub).unwrap_err();
         assert!(matches!(err, Error::NoProjectRoot(_)), "{err:?}");

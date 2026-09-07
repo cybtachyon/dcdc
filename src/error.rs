@@ -78,6 +78,10 @@ pub enum Error {
     /// one.
     MissingValue(String),
 
+    /// UnknownArgument: a dash word in the leading region names no
+    /// dcdc argument, before the sub-command word.
+    UnknownArgument(String),
+
     /// InvalidRepoRef: a repository reference dcdc cannot read.
     InvalidRepoRef(String),
 
@@ -187,6 +191,16 @@ impl fmt::Display for Error {
             ),
             Error::BadUsage(message) => write!(f, "{message}"),
             Error::MissingValue(flag) => write!(f, "{flag} requires a value"),
+            Error::UnknownArgument(arg) => {
+                // The list comes from the arguments module, so a new
+                // argument reaches the message without a second edit.
+                let own = crate::arguments::owned_words().join(", ");
+                write!(
+                    f,
+                    "unrecognized argument {arg} before the sub-command; \
+                     dcdc's own are {own}"
+                )
+            }
             Error::InvalidRepoRef(input) => {
                 write!(
                     f,

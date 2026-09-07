@@ -58,7 +58,7 @@ dcdc -c web default:bash ls -la
 
 ## Plugins
 
-Plugins are TypeScript sub-commands. The defaults are synced into your `~/.dcdc` home when dcdc installs or updates:
+Plugins are TypeScript sub-commands. The defaults are synced into your dcdc home, `~/.dcdc` by default, or `<DCDC_HOME>/.dcdc` when the `DCDC_HOME` environment variable is set. The home is refreshed when dcdc installs or updates:
 ```bash
 dcdc plugin list          # 1. List plugins
 dcdc plugin use jq api    # 2. Pick a default container for a plugin
@@ -91,7 +91,7 @@ dcdc plugin new my-plugin
 
 @todo Finish this stub with links to the GitHub wiki.
 
-## Contributing.
+## Contributing
 
 The test suite is `cargo test`; run cargo with `CARGO_HOME` set to the in-repo `.cargo` so the registry stays inside the
 sandbox. Release packages build with `cargo packager --release`.
@@ -108,7 +108,7 @@ Then you can `sudo apt install ./dist/dcdc_0.1.0_amd64.deb`.
 
 ## Acknowledgements
 
-@todo Finish this stub.
+[DDEV Team](https://github.com/ddev/ddev) For inspiration.
 
 ## License
 MIT. See [LICENSE](LICENSE).

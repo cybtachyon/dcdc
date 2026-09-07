@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="RemoteTargetsManager">
+    <option name="projectDefaultTargetUuid" value="a51c9c22-dd77-4eec-ae31-fb3d1b116561" />
+    <targets>
+      <target name="WSL - Ubuntu" type="wsl" uuid="a51c9c22-dd77-4eec-ae31-fb3d1b116561">
+        <config>
+          <option name="distributionMsId" value="Ubuntu" />
+          <option name="projectRootOnTarget" value="{exitCode=0, timeout=false, cancelled=false, stdout=/tmp/tmp.7E9uQ8bxPK&#13;&#10;, stderr=}/dcdc" />
+        </config>
+        <ContributedStateBase type="RsLanguageRuntime">
+          <config>
+            <option name="cargoPath" value="/home/derek/.local/share/mise/shims/cargo" />
+            <option name="cargoVersion" value="[31mmise[0m [31mERROR[0m No version is set for shim: cargo" />
+            <option name="rustcPath" value="/home/derek/.local/share/mise/shims/rustc" />
+            <option name="rustcVersion" value="[31mmise[0m [31mERROR[0m No version is set for shim: rustc" />
+          </config>
+        </ContributedStateBase>
+      </target>
+    </targets>
+  </component>
+</project>

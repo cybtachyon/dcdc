@@ -142,6 +142,25 @@ mod tests {
     }
 
     #[test]
+    fn the_home_dir_prefers_dcdc_home_over_home() {
+        let base = testutil::temp_subdir("home-dir");
+        let dcdc_home = base.join("dcdc-home");
+        let home = base.join("home");
+        std::fs::create_dir_all(&dcdc_home).unwrap();
+        std::fs::create_dir_all(&home).unwrap();
+
+        // Edition 2024 makes set_var unsafe; the lock keeps these
+        // writes from overlapping the other environment tests.
+        let _lock = testutil::env_lock();
+        unsafe {
+            std::env::set_var("HOME", &home);
+            std::env::set_var("DCDC_HOME", &dcdc_home);
+        };
+        assert_eq!(home_dir().unwrap(), dcdc_home);
+        std::fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
     fn loads_plugin_tables_from_a_file() {
         let base = testutil::temp_subdir("config-load");
         let path = config_file(
@@ -196,8 +215,9 @@ mod tests {
             "[plugin.shell]\ncontainer = \"home-c\"\n",
         );
 
-        // Edition 2024 makes set_var unsafe; this is the only test
-        // that touches this variable.
+        // Edition 2024 makes set_var unsafe; the lock keeps this
+        // write from overlapping the other environment tests.
+        let _lock = testutil::env_lock();
         unsafe { std::env::set_var("DCDC_HOME", &home) };
         let cwd = base.join("proj").join("deep");
         std::fs::create_dir_all(&cwd).unwrap();

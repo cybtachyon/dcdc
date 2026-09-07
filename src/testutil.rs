@@ -16,3 +16,12 @@ pub fn temp_subdir(tag: &str) -> PathBuf {
     std::fs::create_dir_all(&path).expect("failed to create the temp directory");
     path
 }
+
+/// Serializes the tests that mutate process environment variables.
+///
+/// Environment variables are process-wide, so a test that sets one
+/// must not overlap a test that reads or sets the same variable.
+pub fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}

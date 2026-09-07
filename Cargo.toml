@@ -3,9 +3,18 @@ name = "dcdc"
 version = "0.1.0"
 edition = "2024"
 
+# The smoke binary reads the build cfgs to pick the dcdc profile,
+# so they are declared here instead of tripping unexpected_cfgs.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(release)", "cfg(debug_assertions)"] }
+
 [[bin]]
 name = "dcdc"
 path = "src/main.rs"
+
+[[bin]]
+name = "smoke"
+path = "src/bin/smoke.rs"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
@@ -18,15 +27,10 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 rustyscript = "0.12.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+strum = { version = "0.28.0", features = ["derive"] }
 tar = "0.4"
 toml = "0.8"
 toml_edit = "0.22"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
-
-[source.crates-io]
-replace-with = "vendored-sources"
-
-[source.vendored-sources]
-directory = "vendor"

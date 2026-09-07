@@ -14,8 +14,9 @@ This is a monorepo of a Rust CLI for managing local Docker Compose dev environme
   - e.g. `DCDC_HOME=.dcdc ../../target/debug/dcdc hello-world`
 
 ## Code Style
-- Follow Rust conventions: [Effective Rust]([https://go.dev/doc/effective_go](https://effective-rust.com/title-page.html)). Be concise, declarative, and factual.
-- Never use grammatical shortcuts like emdash. Use commas, semicolons, or separate sentences.
+- Follow Rust conventions: [Effective Rust]([https://go.dev/doc/effective_go](https://effective-rust.com/title-page.html)). Be concise, declarative, and factual. Use alphabetical order.
+- Use a declarative and explicit coding style. Ensure single sources of truth and use language mechanics for deterministic behavior. Use tools like Enums, Generics, and Traits if they fit the problem.   
+- Never use grammatical shortcuts like emdash. Use separate sentences first or commas and semicolons if necessary. Avoid pronouns and adverbs as much as possible.
 - **Doc comments** start with the name and state what it does. Structure: `// [Name] [verb]s [what]. [Optional: when/why to use it].` Put useful information where users make decisions (usually the constructor, not methods).
 - **Inline comments** are terse. Prefer end-of-line when short enough.
 - **Explain why, not what.** The code shows what it does; comments should explain reasoning, non-obvious decisions, or edge cases.
